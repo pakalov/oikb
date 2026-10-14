@@ -141,6 +141,7 @@ def run_sync(
     manifest_filter: Callable[[list[ManifestEntry]], list[ManifestEntry]] | None = None,
     concurrency: int = 1,
     cancel_requested: Callable[[], bool] | None = None,
+    process: bool = True,
 ) -> SyncResult:
     """Execute a full incremental sync.
 
@@ -159,7 +160,7 @@ def run_sync(
     try:
         return _run_sync_inner(
             client, connector, kb_id, dry_run, verbose, quiet,
-            manifest_filter, concurrency, result, cancel_requested,
+            manifest_filter, concurrency, result, cancel_requested, process,
         )
     finally:
         connector.close()
@@ -176,6 +177,7 @@ def _run_sync_inner(
     concurrency: int,
     result: SyncResult,
     cancel_requested: Callable[[], bool] | None,
+    process: bool,
 ) -> SyncResult:
     """Inner sync logic, separated for clean connector cleanup."""
     show_progress = not quiet and not dry_run
@@ -364,6 +366,7 @@ def _run_sync_inner(
                     kb_id=kb_id,
                     file_hash=manifest_entry.checksum,
                     directory_id=directory_id,
+                    process=process,
                 )
                 if progress is not None:
                     progress.update(task_id, advance=1, description=f"[cyan]{display}[/cyan]")

@@ -156,3 +156,65 @@ def test_upload_sends_markdown_as_text_without_system_mime_types(monkeypatch):
     route = respx.post("https://webui.example/api/v1/files/").mock(return_value=httpx.Response(200, json={"id": "f"}))
     OikbClient("https://webui.example", "token").upload_file(b"| a |\n| - |\n", "doc.md", "kb", "hash")
     assert b"Content-Type: text/markdown" in route.calls.last.request.content
+
+
+@pytest.mark.parametrize(
+    ("second", "message"),
+    [
+        ({"process": False}, "same process setting"),
+        ({"url": "https://other.example"}, "same url and token"),
+        ({"process": "no"}, "process must be true or false"),
+    ],
+)
+def test_validate_reports_kb_group_errors(tmp_path, second, message):
+    import yaml
+
+    import oikb.cli as cli
+
+    (tmp_path / "docs").mkdir()
+    entries = [
+        {"name": "one", "source": str(tmp_path / "docs"), "kb-id": "kb"},
+        {"name": "two", "source": str(tmp_path / "docs"), "kb-id": "kb", **second},
+    ]
+    config = tmp_path / "oikb.yaml"
+    config.write_text(yaml.safe_dump({"sources": entries}))
+
+    result = CliRunner().invoke(cli.cli, ["validate", "--config", str(config)])
+
+    assert result.exit_code == 1, result.output
+    assert message in result.output
+
+
+def test_validate_accepts_consistent_kb_group(tmp_path):
+    import yaml
+
+    import oikb.cli as cli
+
+    (tmp_path / "docs").mkdir()
+    entries = [
+        {"name": "one", "source": str(tmp_path / "docs"), "kb-id": "kb", "process": False},
+        {"name": "two", "source": str(tmp_path / "docs"), "kb-id": "kb", "process": False},
+        {"name": "three", "source": str(tmp_path / "docs"), "kb-id": "other"},
+    ]
+    config = tmp_path / "oikb.yaml"
+    config.write_text(yaml.safe_dump({"sources": entries}))
+
+    result = CliRunner().invoke(cli.cli, ["validate", "--config", str(config)])
+
+    assert result.exit_code == 0, result.output
+    assert "3 entry(s) valid" in result.output
+
+
+def test_validate_does_not_repeat_missing_field_errors(tmp_path):
+    import yaml
+
+    import oikb.cli as cli
+
+    config = tmp_path / "oikb.yaml"
+    config.write_text(yaml.safe_dump({"sources": [{"name": "broken", "kb-id": "kb"}]}))
+
+    result = CliRunner().invoke(cli.cli, ["validate", "--config", str(config)])
+
+    assert result.exit_code == 1
+    assert result.output.count("missing source or kb-id") == 1
+    assert "Each source requires" not in result.output

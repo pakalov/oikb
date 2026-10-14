@@ -427,6 +427,12 @@ def _parse_auth_option(pairs: tuple[str, ...]) -> dict[str, str]:
 @click.option("--concurrency", default=1, type=int, help="Parallel upload workers (default: 1, sequential).")
 @click.option("--max-file-size", default=None, help="Skip files larger than this (e.g. 50mb, 1gb).")
 @click.option(
+    "--no-process",
+    is_flag=True,
+    help="Store files in the KB without content extraction or embedding. "
+    "Ignored in .oikb.yaml mode — set process: false on the entry instead.",
+)
+@click.option(
     "--auth",
     "auth_pairs",
     multiple=True,
@@ -448,6 +454,7 @@ def sync(
     name: str | None,
     concurrency: int,
     max_file_size: str | None,
+    no_process: bool,
     auth_pairs: tuple[str, ...],
 ):
     """Incremental sync from a source to a Knowledge Base.
@@ -557,6 +564,7 @@ def sync(
             quiet=quiet,
             concurrency=concurrency,
             manifest_filter=_build_cli_filter(max_file_size),
+            process=not no_process,
         )
     except Exception as e:
         click.echo(click.style(f"Sync failed: {e}", fg="red"), err=True)
@@ -991,6 +999,15 @@ def validate(config_file: str | None, deep: bool):
                 has_errors = True
         else:
             click.echo(click.style(f"  ✓ {entry_name}", fg="green") + f"  {source} → {kb_id}")
+
+    # Rules spanning entries that share a KB; missing fields are reported above.
+    from oikb.kb_sync import group_entries_by_kb
+
+    try:
+        group_entries_by_kb([e for e in entries if e.get("source") and e.get("kb-id")])
+    except ValueError as e:
+        click.echo(click.style(f"  ✗ {e}", fg="red"))
+        has_errors = True
 
     if client:
         client.close()

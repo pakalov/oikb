@@ -85,8 +85,13 @@ class OikbClient:
         kb_id: str,
         file_hash: str,
         directory_id: str | None = None,
+        process: bool = True,
     ) -> dict[str, Any]:
-        """POST /files/ — upload a single file to the KB."""
+        """POST /files/ — upload a single file to the KB.
+
+        With process=False the file is stored without extraction or embedding,
+        then linked to the KB explicitly.
+        """
 
         metadata: dict[str, Any] = {
             "knowledge_id": kb_id,
@@ -97,11 +102,41 @@ class OikbClient:
 
         resp = self._http.post(
             "/files/",
+            params=None if process else {"process": "false"},
             files={"file": (filename, file_content, _content_type(filename))},
             data={"metadata": json.dumps(metadata)},
         )
         resp.raise_for_status()
-        return resp.json()
+        uploaded = resp.json()
+        if not process:
+            self._link_unprocessed_file(uploaded["id"], filename, kb_id, directory_id)
+        return uploaded
+
+    def _link_unprocessed_file(
+        self,
+        file_id: str,
+        filename: str,
+        kb_id: str,
+        directory_id: str | None,
+    ) -> None:
+        # Open WebUI only links a file to a KB once it has extracted content, so
+        # store a tiny stub instead. It must be unique per file: Open WebUI
+        # rejects identical content within one KB collection.
+        stub = f"{filename} (stored without content extraction; file id {file_id})"
+        link: dict[str, Any] = {"file_id": file_id}
+        if directory_id:
+            link["directory_id"] = directory_id
+        try:
+            resp = self._http.post(f"/files/{file_id}/data/content/update", json={"content": stub})
+            resp.raise_for_status()
+            resp = self._http.post(f"/knowledge/{kb_id}/file/add", json=link)
+            resp.raise_for_status()
+        except Exception:
+            try:
+                self._http.delete(f"/files/{file_id}")
+            except httpx.HTTPError:
+                pass
+            raise
 
     # ── Directory management ────────────────────────────────────
 

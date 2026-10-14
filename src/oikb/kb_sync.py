@@ -16,9 +16,13 @@ def group_entries_by_kb(entries: list[dict]) -> list[list[dict]]:
     for entry in entries:
         if not entry.get("source") or not entry.get("kb-id"):
             raise ValueError("Each source requires source and kb-id")
+        if not isinstance(entry.get("process", True), bool):
+            raise ValueError(f"process must be true or false (source {entry['source']})")
         group = groups.setdefault(entry["kb-id"], [])
         if group and any(entry.get(key) != group[0].get(key) for key in ("url", "token")):
             raise ValueError(f"Sources for KB {entry['kb-id']} must use the same url and token")
+        if group and entry.get("process", True) != group[0].get("process", True):
+            raise ValueError(f"Sources for KB {entry['kb-id']} must use the same process setting")
         group.append(entry)
     return list(groups.values())
 
@@ -105,4 +109,5 @@ def run_entries_sync(
             quiet=quiet,
             concurrency=max(entry.get("concurrency", concurrency) for entry in entries),
             cancel_requested=cancel_requested,
+            process=entries[0].get("process", True),
         )

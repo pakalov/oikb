@@ -13,6 +13,7 @@ A complete guide to syncing content into Open WebUI Knowledge Bases.
 - [Configuration File](#configuration-file)
   - [Generating with oikb init](#generating-with-oikb-init)
   - [Manual Setup](#manual-setup)
+  - [Storing Files Without Processing](#storing-files-without-processing)
   - [Global Defaults](#global-defaults)
   - [Environment Variable Interpolation](#environment-variable-interpolation)
 - [Sources](#sources)
@@ -188,6 +189,35 @@ Existing single-source paths remain unchanged. Combining previously separate
 sources can relocate files; preview with `oikb sync --dry-run`. Use YAML mode
 for a shared KB: a standalone `oikb sync SOURCE --kb-id ID` only knows about that
 one source.
+
+### Storing Files Without Processing
+
+By default Open WebUI extracts the text of every uploaded file and embeds it in
+the vector database, which can take a long time for very large files. If the
+files are only read by a custom tool (for example one that opens the original
+spreadsheet), set `process: false` to store them in the Knowledge Base as-is:
+
+```yaml
+sources:
+  - name: lookup-tables
+    source: sharepoint:contoso.sharepoint.com/sites/Team/Docs
+    path: Lookup
+    kb-id: abc123
+    process: false
+```
+
+For a single source, use `oikb sync SOURCE --kb-id ID --no-process`.
+
+Each file is uploaded without content extraction and linked to the Knowledge
+Base with a short placeholder as its text, so it is not useful for RAG or the
+built-in knowledge tools. Notes:
+
+- All sources that target the same Knowledge Base must use the same `process`
+  value.
+- Open WebUI still embeds the one-line placeholder, so its embedding engine must
+  be reachable, and the admin's maximum upload size still applies.
+- Changing `process` does not re-upload unchanged files. To convert an existing
+  Knowledge Base, run `oikb reset --kb-id ID` and sync again.
 
 ### Global Defaults
 
@@ -868,6 +898,7 @@ oikb sync [SOURCE]                  Incremental sync
 oikb sync --dry-run                 Preview without uploading
 oikb sync --max-file-size 50mb      Skip large files
 oikb sync --concurrency 4           Parallel uploads
+oikb sync --no-process              Store files without extraction or embedding
 oikb sync --scan-secrets            Block files with credentials
 oikb watch <dir> --kb-id ID         Auto-sync on file change
 oikb daemon                         Start scheduled daemon
