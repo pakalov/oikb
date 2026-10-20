@@ -208,3 +208,22 @@ def test_validate_does_not_repeat_missing_field_errors(tmp_path):
     assert result.exit_code == 1
     assert result.output.count("missing source or kb-id") == 1
     assert "Each source requires" not in result.output
+
+
+@pytest.mark.parametrize(
+    ("second", "message"),
+    [({"process": False}, "same process setting"), ({"process": "no"}, "process must be true or false")],
+)
+def test_validate_reports_process_errors(tmp_path, second, message):
+    import oikb.cli as cli
+
+    docs = str(tmp_path / "docs")
+    config = _write_config(tmp_path, [
+        {"name": "one", "source": docs, "kb-id": "kb"},
+        {"name": "two", "source": docs, "kb-id": "kb", **second},
+    ])
+
+    result = CliRunner().invoke(cli.cli, ["validate", "--config", str(config)])
+
+    assert result.exit_code == 1, result.output
+    assert message in result.output
